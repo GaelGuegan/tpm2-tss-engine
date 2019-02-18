@@ -24,13 +24,16 @@ key information. This file can then be loaded with OpenSSL using
 # OPTIONS
 
   * `-a <algorithm>`, `--alg <algorithm>`:
-    The public key algorithm (rsa, ecdsa) (default: rsa)
+    The public key algorithm (rsa, ecdsa, aes) (default: rsa)
 
   * `-c <curve>`, `--curve <curve>`:
     If alg ecdsa is chosen, the curve for ecc (default: nist_p256)
 
   * `-e <exponent>`, `--exponent <exponent>`:
     If alg rsa is chosen, the exponent for rsa (default: 65537)
+
+  * `-m <cipher mode of operation>`, `--mode <cipher mode of operation>`:
+    If alg aes is chosen, the mode of operation of data block (default: CFB)
 
   * `-h`, `--help`:
     Print help
@@ -93,4 +96,3 @@ Technologies AG. License BSD 3-clause.
 ## SEE ALSO
 
 openssl(1)
-
