@@ -33,7 +33,7 @@ tpm2_flushcontext -T mssim -t
 HANDLE=$(tpm2_evictcontrol -T mssim -a o -c ${RSA_CTX} | cut -d ' ' -f 2)
 tpm2_flushcontext -T mssim -t
 
-KEY=${HANDLE}
+KEY=$(echo ${HANDLE} | cut -d 'x' -f 2)
 IV=0123456789012345
 
 # Encrypt Data

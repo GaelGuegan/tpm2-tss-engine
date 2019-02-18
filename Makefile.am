@@ -31,7 +31,7 @@
 
 ### Initialize global variables used throughout the file ###
 INCLUDE_DIRS    = -I$(srcdir)/include -I$(srcdir)/src
-ACLOCAL_AMFLAGS = -I m4
+ACLOCAL_AMFLAGS = -I m4 --install
 AM_CFLAGS       = $(INCLUDE_DIRS) $(EXTRA_CFLAGS) $(TSS2_ESYS_CFLAGS) \
                   $(CRYPTO_CFLAGS) $(CODE_COVERAGE_CFLAGS)
 AM_LDFLAGS      = $(EXTRA_LDFLAGS) $(CODE_COVERAGE_LIBS)
@@ -50,7 +50,13 @@ bin_PROGRAMS =
 
 ### Add ax_* rules ###
 # ax_code_coverage
+if AUTOCONF_CODE_COVERAGE_2019_01_06
+include $(top_srcdir)/aminclude_static.am
+clean-local: code-coverage-clean
+distclean-local: code-coverage-dist-clean
+else
 @CODE_COVERAGE_RULES@
+endif
 
 ### OpenSSL Engine ###
 openssl_enginedir = $(ENGINESDIR)
@@ -111,7 +117,8 @@ TESTS_SHELL = test/ecdsa.sh \
               test/rsasign_parent.sh \
               test/rsasign_persistent.sh \
               test/rsasign_persistent_emptyauth.sh \
-              test/ciphers.sh
+              test/ciphers.sh \
+              test/sserver.sh
 EXTRA_DIST += $(TESTS_SHELL)
 
 check_PROGRAMS = $(TESTS_UNIT)

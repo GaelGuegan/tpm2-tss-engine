@@ -47,7 +47,6 @@ typedef struct {
 } TPM2_DATA_CIPHER;
 
 static int tpm2_cipher_nids[] = {
-    NID_aes_128_cbc,
     NID_aes_192_ofb128,
     NID_aes_256_cfb1,
     NID_aes_256_cbc,
@@ -125,6 +124,8 @@ static TPMI_ALG_SYM_MODE tpm2_get_cipher_mode(EVP_CIPHER_CTX *ctx, TPM2_DATA_CIP
     }
     if (mode_tpm2 == TPM2_ALG_NULL)
         mode_tpm2 = TPM2_ALG_CFB;
+
+    mode_tpm2 = tpm2DataCipher->tpm2Data->pub.publicArea.parameters.symDetail.sym.mode.sym;
 
     return mode_tpm2;
 }
@@ -209,7 +210,7 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
     in_data->size = inl;
 
     /* Get mode value */
-    mode = tpm2DataCipher->tpm2Data->pub.publicArea.parameters.symDetail.sym.mode.sym;
+    mode = tpm2_get_cipher_mode(ctx, tpm2DataCipher);
     enc = tpm2DataCipher->enc;
     iv_in = tpm2DataCipher->iv;
 
@@ -246,18 +247,18 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
                                    in_data,
                                    &out_data,
                                    &iv_out );
-        if(ret == TPM2_RC_SUCCESS)
+        if(ret == TPM2_RC_SUCCESS) {
             DBG("Esys_EncryptDecrypt  : SUCCESS\n");
-        else
-            DBG("Esys_EncryptDecrypt  : FAILED\n", ret);
+        }
+        else {
+            DBG("Esys_EncryptDecrypt  : FAILED\n");
+        }
     }
     ERRchktss(tpm2_do_cipher, ret, goto error);
 
     /* Copy out_data : TPM2B_MAX_BUFFER to unsigned char* */
     memcpy(out, out_data->buffer, out_data->size);
     out[out_data->size] = '\0';
-    printf("IN (%d)  : %s\n", in_data->size, in_data->buffer);
-    printf("OUT (%d) : %s\n", out_data->size, out);
 
     /* Close TPM session */
     if (keyHandle != ESYS_TR_NONE) {
