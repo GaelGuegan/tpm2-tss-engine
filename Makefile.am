@@ -66,7 +66,8 @@ libtpm2tss_la_SOURCES = src/tpm2-tss-engine.c \
                         src/tpm2-tss-engine-err.h \
                         src/tpm2-tss-engine-ecc.c \
                         src/tpm2-tss-engine-rand.c \
-                        src/tpm2-tss-engine-rsa.c
+                        src/tpm2-tss-engine-rsa.c \
+                        src/tpm2-tss-engine-ciphers.c
 libtpm2tss_la_CFLAGS = $(AM_CFLAGS)
 libtpm2tss_la_LIBADD = $(AM_LDADD)
 libtpm2tss_la_LDFLAGS = $(AM_LDFLAGS) -no-undefined -avoid-version \
@@ -79,7 +80,7 @@ install-exec-local:
 # Due to confusions with OpenSSL Naming conventions for engines regarding the
 # lib* prefix, we will create a symlink for the engine on install
 # see https://github.com/tpm2-software/tpm2-tss-engine/issues/6#issuecomment-422489744
-# see https://github.com/openssl/openssl/commit/9ee0ed3de66678a15db126d10b3e4226e835b8f5 
+# see https://github.com/openssl/openssl/commit/9ee0ed3de66678a15db126d10b3e4226e835b8f5
 install-exec-hook:
 	(cd $(DESTDIR)$(openssl_enginedir) && \
          $(LN_S) -f libtpm2tss.so tpm2tss.so)
@@ -109,7 +110,8 @@ TESTS_SHELL = test/ecdsa.sh \
               test/failwrite.sh \
               test/rsasign_parent.sh \
               test/rsasign_persistent.sh \
-              test/rsasign_persistent_emptyauth.sh
+              test/rsasign_persistent_emptyauth.sh \
+              test/ciphers.sh
 EXTRA_DIST += $(TESTS_SHELL)
 
 check_PROGRAMS = $(TESTS_UNIT)
