@@ -80,6 +80,8 @@ AS_IF([test "x$enable_tctienvvar" = xyes], [AC_DEFINE([ENABLE_TCTIENVVAR], [1])]
 
 AC_CONFIG_FILES([Makefile])
 
+AX_ADD_PREPROC_FLAG([-D_DEFAULT_SOURCE])
+
 AX_ADD_COMPILER_FLAG([-std=c99])
 AX_ADD_COMPILER_FLAG([-Wall])
 AX_ADD_COMPILER_FLAG([-Wextra])
