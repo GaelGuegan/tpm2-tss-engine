@@ -46,3 +46,6 @@ diff ${DIR}/data.txt ${DIR}/dec_data.txt
 
 # Release persistent HANDLE
 tpm2_evictcontrol -T mssim -a o -c ${HANDLE}
+
+# Test Gen Key
+tpm2tss-genkey -a aes -s 128 ${DIR}/mykey

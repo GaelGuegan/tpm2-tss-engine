@@ -50,7 +50,8 @@ char *help =
     "Arguments:\n"
     "    <filename>      storage for the encrypted private key\n"
     "Options:\n"
-    "    -a, --alg       public key algorithm (rsa, ecdsa) (default: rsa)\n"
+    "    -a, --alg       public key algorithm (rsa, ecdsa, aes) (default: rsa)\n"
+    "    -m, --mode      block cipher mode of operation (default: cfb)"
     "    -c, --curve     curve for ecc (default: nist_p256)\n"
     "    -e, --exponent  exponent for rsa (default: 65537)\n"
     "    -h, --help      print help\n"
@@ -80,6 +81,7 @@ static struct opt {
     char *filename;
     TPMI_ALG_PUBLIC alg;
     TPMI_ECC_CURVE curve;
+    TPMI_ALG_SYM_MODE sym_mode;
     int exponent;
     char *ownerpw;
     char *password;
@@ -110,6 +112,7 @@ parse_opts(int argc, char **argv)
     opt.parent = 0;
     opt.keysize = 2048;
     opt.verbose = 0;
+    opt.sym_mode = TPM2_ALG_CFB;
 
     /* parse the options */
     int c;
@@ -129,6 +132,9 @@ parse_opts(int argc, char **argv)
                 break;
             } else if (strcasecmp(optarg, "ecdsa") == 0) {
                 opt.alg = TPM2_ALG_ECDSA;
+                break;
+            } else if (strcasecmp(optarg, "aes") == 0) {
+                opt.alg = TPM2_ALG_AES;
                 break;
             } else {
                 ERR("Unknown algorithm.\n");
@@ -151,6 +157,20 @@ parse_opts(int argc, char **argv)
                 exit(1);
             }
             break;
+        case 'm':
+            if (strcasecmp(optarg, "cfb") == 0) {
+                opt.alg = TPM2_ALG_CFB;
+                break;
+            } else if (strcasecmp(optarg, "cbc") == 0) {
+                opt.alg = TPM2_ALG_CBC;
+                break;
+            } else if (strcasecmp(optarg, "ofb") == 0) {
+                opt.alg = TPM2_ALG_OFB;
+                break;
+            } else {
+                ERR("Unknown sym mode.\n");
+                exit(1);
+            }
         case 'o':
             opt.ownerpw = optarg;
             break;
@@ -279,6 +299,35 @@ genkey_ecdsa()
     return tpm2Data;
 }
 
+static TPM2_DATA *
+genkey_sym()
+{
+    EVP_CIPHER_CTX *cipher_ctx = NULL;
+
+    cipher_ctx = EVP_CIPHER_CTX_new();
+    if (!cipher_ctx) {
+        ERR("out of memory\n");
+        return NULL;
+    }
+    if (!tpm2tss_sym_genkey(cipher_ctx, opt.alg, opt.sym_mode, opt.keysize, opt.password, opt.parent)) {
+        EVP_CIPHER_CTX_free(cipher_ctx);
+        ERR("Error: Generating key failed\n");
+        return NULL;
+    }
+
+    TPM2_DATA *tpm2Data = calloc(1, sizeof(*tpm2Data));
+    if (tpm2Data == NULL) {
+        ERR("out of memory\n");
+        EVP_CIPHER_CTX_free(cipher_ctx);
+        return NULL;
+    }
+    memcpy(tpm2Data, EVP_CIPHER_CTX_get_app_data(cipher_ctx), sizeof(*tpm2Data));
+
+    EVP_CIPHER_CTX_free(cipher_ctx);
+
+    return tpm2Data;
+}
+
 /** Main function
  *
  * This function initializes OpenSSL and then calls the key generation
@@ -327,6 +376,10 @@ main(int argc, char **argv)
         break;
     case TPM2_ALG_ECDSA:
         tpm2Data = genkey_ecdsa();
+        break;
+    case TPM2_ALG_AES:
+    case TPM2_ALG_CAMELLIA:
+        tpm2Data = genkey_sym();
         break;
     default:
         break;

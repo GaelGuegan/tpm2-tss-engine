@@ -83,4 +83,9 @@ tpm2tss_ecc_getappdata(EC_KEY *key);
 int
 tpm2tss_ecc_setappdata(EC_KEY *key, TPM2_DATA *data);
 
+int
+tpm2tss_sym_genkey(EVP_CIPHER_CTX *cipher, TPMI_ALG_PUBLIC algo,
+                   TPMI_ALG_SYM_MODE mode, int bits,
+                   char *password, TPM2_HANDLE parentHandle);
+
 #endif /* TPM2_TSS_ENGINE_H */

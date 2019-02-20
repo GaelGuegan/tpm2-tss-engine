@@ -33,4 +33,4 @@ trap "cleanup" EXIT
 
 sleep 1
 
-echo "GET index.html" | openssl s_client -connect localhost:8443 -cipher AES-128-SHA256
+echo "GET index.html" | openssl s_client -connect localhost:8443

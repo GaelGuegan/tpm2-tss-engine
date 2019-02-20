@@ -46,6 +46,35 @@ typedef struct {
     TPM2B_IV iv;         // Initialization Vector
 } TPM2_DATA_CIPHER;
 
+static TPM2B_DATA allOutsideInfo = {
+    .size = 0,
+};
+
+static TPML_PCR_SELECTION allCreationPCR = {
+    .count = 0,
+};
+
+static TPM2B_PUBLIC keyTemplate = {
+    .publicArea = {
+        .type = TPM2_ALG_SYMCIPHER,
+        .nameAlg = ENGINE_HASH_ALG,
+        .objectAttributes = (TPMA_OBJECT_USERWITHAUTH |
+                             TPMA_OBJECT_SIGN_ENCRYPT |
+                             TPMA_OBJECT_DECRYPT |
+                             TPMA_OBJECT_FIXEDTPM |
+                             TPMA_OBJECT_FIXEDPARENT |
+                             TPMA_OBJECT_SENSITIVEDATAORIGIN |
+                             TPMA_OBJECT_NODA),
+        .authPolicy.size = 0,
+        .parameters.symDetail.sym = {
+             .algorithm = TPM2_ALG_NULL,
+             .keyBits.sym = 0,
+             .mode.sym = 0,
+              },
+        .unique.sym.size = 0
+     }
+};
+
 static int tpm2_cipher_nids[] = {
     NID_aes_192_ofb128,
     NID_aes_256_cfb1,
@@ -65,6 +94,97 @@ static int convert_array_hex_to_int(const unsigned char *in, size_t size)
     }
 
     return integer;
+}
+
+int
+tpm2tss_sym_genkey(EVP_CIPHER_CTX *cipher, TPMI_ALG_PUBLIC algo,
+                   TPMI_ALG_SYM_MODE mode, int bits,
+                   char *password, TPM2_HANDLE parentHandle)
+{
+    //DBG("Generating %s in %s mode for %i bits keysize.\n", algo, mode, bits);
+    DBG("Generating for %i bits keysize.\n", bits);
+
+    TSS2_RC r = TSS2_RC_SUCCESS;
+    ESYS_AUXCONTEXT eactx = (ESYS_AUXCONTEXT) { 0 };
+    ESYS_TR parent = ESYS_TR_NONE;
+    TPM2B_PUBLIC *keyPublic = NULL;
+    TPM2B_PRIVATE *keyPrivate = NULL;
+    TPM2_DATA *tpm2Data = NULL;
+    TPM2B_PUBLIC inPublic = keyTemplate;
+    TPM2B_SENSITIVE_CREATE inSensitive = {
+        .sensitive = {
+            .userAuth = {
+                 .size = 0,
+             },
+            .data = {
+                 .size = 0,
+             }
+        }
+    };
+
+    tpm2Data = OPENSSL_malloc(sizeof(*tpm2Data));
+    if (tpm2Data == NULL) {
+        ERR(tpm2tss_sym_genkey, TPM2TSS_R_GENERAL_FAILURE);
+        goto error;
+    }
+    memset(tpm2Data, 0, sizeof(*tpm2Data));
+
+    // Set mode, algo, keysize
+    inPublic.publicArea.parameters.symDetail.sym.algorithm = algo;
+    inPublic.publicArea.parameters.symDetail.sym.keyBits.sym = bits;
+    inPublic.publicArea.parameters.symDetail.sym.mode.sym = mode;
+
+    if (password) {
+        DBG("Setting a password for the created key.\n");
+        if (strlen(password) > sizeof(tpm2Data->userauth.buffer) - 1) {
+            goto error;
+        }
+        tpm2Data->userauth.size = strlen(password);
+        memcpy(&tpm2Data->userauth.buffer[0], password,
+               tpm2Data->userauth.size);
+
+        inSensitive.sensitive.userAuth.size = strlen(password);
+        memcpy(&inSensitive.sensitive.userAuth.buffer[0], password,
+               strlen(password));
+    } else
+        tpm2Data->emptyAuth = 1;
+
+    r = init_tpm_parent(&eactx, parentHandle, &parent);
+    ERRchktss(tpm2tss_sym_genkey, r, goto error);
+
+    tpm2Data->parent = parentHandle;
+
+    DBG("Generating the Sym key inside the TPM.\n");
+
+    r = Esys_Create(eactx.ectx, parent,
+                    ESYS_TR_PASSWORD, ESYS_TR_NONE, ESYS_TR_NONE,
+                    &inSensitive, &inPublic, &allOutsideInfo, &allCreationPCR,
+                    &keyPrivate, &keyPublic, NULL, NULL, NULL);
+    ERRchktss(tpm2tss_sym_genkey, r, goto error);
+
+    DBG("Generated the Sym key inside the TPM.\n");
+
+    tpm2Data->pub = *keyPublic;
+    tpm2Data->priv = *keyPrivate;
+
+    EVP_CIPHER_CTX_set_app_data(cipher, tpm2Data);
+
+    goto end;
+ error:
+    r = -1;
+    if (tpm2Data)
+        OPENSSL_free(tpm2Data);
+
+ end:
+    free(keyPrivate);
+    free(keyPublic);
+
+    if (parent != ESYS_TR_NONE && !parentHandle)
+        Esys_FlushContext(eactx.ectx, parent);
+
+    esys_auxctx_free(&eactx);
+
+    return (r == TSS2_RC_SUCCESS);
 }
 
 static int populate_tpm2data(const unsigned char *key, TPM2_DATA **tpm2Data)
@@ -89,8 +209,8 @@ static int populate_tpm2data(const unsigned char *key, TPM2_DATA **tpm2Data)
 
     /* Use blob context */
     } else {
-        if (!tpm2tss_tpm2data_read((char *)key, tpm2Data))
-            return 0;
+        //if (!tpm2tss_tpm2data_read((char *)key, tpm2Data))
+        //    return 0;
     }
 
     return 1;
@@ -98,36 +218,20 @@ static int populate_tpm2data(const unsigned char *key, TPM2_DATA **tpm2Data)
 
 static TPMI_ALG_SYM_MODE tpm2_get_cipher_mode(EVP_CIPHER_CTX *ctx, TPM2_DATA_CIPHER *tpm2DataCipher)
 {
-    TPMI_ALG_SYM_MODE mode_tpm2;
-    unsigned long mode_ctx;
-
-    mode_ctx = EVP_CIPHER_CTX_mode(ctx);
-    switch (mode_ctx) {
+    switch (EVP_CIPHER_CTX_mode(ctx)) {
         case EVP_CIPH_CFB_MODE:
-            mode_tpm2 = TPM2_ALG_CFB;
-            break;
+            return TPM2_ALG_CFB;
         case EVP_CIPH_OFB_MODE:
-            mode_tpm2 = TPM2_ALG_OFB;
-            break;
+            return TPM2_ALG_OFB;
         case EVP_CIPH_CTR_MODE:
-            mode_tpm2 = TPM2_ALG_CTR;
-            break;
+            return TPM2_ALG_CTR;
         case EVP_CIPH_ECB_MODE:
-            mode_tpm2 = TPM2_ALG_ECB;
-            break;
+            return TPM2_ALG_ECB;
         case EVP_CIPH_CBC_MODE:
-            mode_tpm2 = TPM2_ALG_CBC;
-            break;
+            return TPM2_ALG_CBC;
         default:
-            mode_tpm2 = tpm2DataCipher->tpm2Data->pub.publicArea.parameters.symDetail.sym.mode.sym;
-            break;
+            return tpm2DataCipher->tpm2Data->pub.publicArea.parameters.symDetail.sym.mode.sym;
     }
-    if (mode_tpm2 == TPM2_ALG_NULL)
-        mode_tpm2 = TPM2_ALG_CFB;
-
-    mode_tpm2 = tpm2DataCipher->tpm2Data->pub.publicArea.parameters.symDetail.sym.mode.sym;
-
-    return mode_tpm2;
 }
 
 static int
@@ -303,6 +407,24 @@ tpm2_cipher_cleanup(EVP_CIPHER_CTX *ctx)
     return 1;
 }
 
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+static EVP_CIPHER tpm2_aes_256_cbc =
+{
+    NID_aes_256_cbc,                    // ID
+    TPM2_MAX_SYM_BLOCK_SIZE,            // Block size
+    TPM2_MAX_SYM_KEY_BYTES,             // Key length
+    TPM2_MAX_SYM_BLOCK_SIZE,            // IV length
+    EVP_CIPH_CBC_MODE,                  // Flags
+    tpm2_cipher_init_key,               // Init key
+    tpm2_do_cipher,                     // Encrypt/Decrypt
+    tpm2_cipher_cleanup,                // Cleanup
+    sizeof(TPM2_DATA_CIPHER),           // Context size
+    NULL,                               // Set ASN1 parameters
+    NULL,                               // Get ASN1 parameters
+    NULL,                               // CTRL
+    NULL                                // App data
+};
+#else
 static EVP_CIPHER *_tpm2_aes_256_cbc = NULL;
 const EVP_CIPHER *tpm2_aes_256_cbc(void)
 {
@@ -323,6 +445,7 @@ const EVP_CIPHER *tpm2_aes_256_cbc(void)
     }
     return _tpm2_aes_256_cbc;
 }
+#endif
 
 static int
 tpm2_ciphers_selector(ENGINE *e, const EVP_CIPHER **cipher, const int **nids, int nid)
@@ -337,7 +460,11 @@ tpm2_ciphers_selector(ENGINE *e, const EVP_CIPHER **cipher, const int **nids, in
 
    switch (nid) {
     case NID_aes_256_cbc:
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+        *cipher = &tpm2_aes_256_cbc;
+#else
         *cipher = tpm2_aes_256_cbc();
+#endif
         break;
     /*
     case NID_aes_256_ocb:
