@@ -218,19 +218,23 @@ static int populate_tpm2data(const unsigned char *key, TPM2_DATA **tpm2Data)
 
 static TPMI_ALG_SYM_MODE tpm2_get_cipher_mode(EVP_CIPHER_CTX *ctx, TPM2_DATA_CIPHER *tpm2DataCipher)
 {
-    switch (EVP_CIPHER_CTX_mode(ctx)) {
-        case EVP_CIPH_CFB_MODE:
-            return TPM2_ALG_CFB;
-        case EVP_CIPH_OFB_MODE:
-            return TPM2_ALG_OFB;
-        case EVP_CIPH_CTR_MODE:
-            return TPM2_ALG_CTR;
-        case EVP_CIPH_ECB_MODE:
-            return TPM2_ALG_ECB;
-        case EVP_CIPH_CBC_MODE:
-            return TPM2_ALG_CBC;
-        default:
-            return tpm2DataCipher->tpm2Data->pub.publicArea.parameters.symDetail.sym.mode.sym;
+    if (tpm2DataCipher->tpm2Data->pub.publicArea.parameters.symDetail.sym.mode.sym == TPM2_ALG_NULL) {
+        switch (EVP_CIPHER_CTX_mode(ctx)) {
+            case EVP_CIPH_CFB_MODE:
+                return TPM2_ALG_CFB;
+            case EVP_CIPH_OFB_MODE:
+                return TPM2_ALG_OFB;
+            case EVP_CIPH_CTR_MODE:
+                return TPM2_ALG_CTR;
+            case EVP_CIPH_ECB_MODE:
+                return TPM2_ALG_ECB;
+            case EVP_CIPH_CBC_MODE:
+                return TPM2_ALG_CBC;
+            default:
+                return TPM2_ALG_CBC;
+        }
+    } else {
+        return tpm2DataCipher->tpm2Data->pub.publicArea.parameters.symDetail.sym.mode.sym;
     }
 }
 
