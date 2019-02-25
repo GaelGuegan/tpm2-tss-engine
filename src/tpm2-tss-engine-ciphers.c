@@ -1,5 +1,5 @@
 /*******************************************************************************
- * Copyright 2017-2018, Schneider-Electric
+ * Copyright 2019, Schneider-Electric
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -329,6 +329,15 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
     DBG("enc  : %d\n", enc);
     DBG("iv   : %d\n", iv_in.size);
     DBG("\n");
+    printf("------------ IN ---------------- (%zd)\n", inl);
+    for(int i = 0; in[i] != '\0'; i++) {
+        printf("%c ", in[i]);
+    }
+    printf("\n");
+    for(int i = 0; in[i] != '\0'; i++) {
+        printf("%02x", in[i]);
+    }
+    printf("\n\n");
 
     /* Trying to encrypt */
     ret = Esys_EncryptDecrypt2( eactx.ectx,
@@ -367,6 +376,16 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
     /* Copy out_data : TPM2B_MAX_BUFFER to unsigned char* */
     memcpy(out, out_data->buffer, out_data->size);
     out[out_data->size] = '\0';
+
+    printf("------------ OUT ----------------\n");
+    for(int i = 0; out[i] != '\0'; i++) {
+        printf("%c ", out[i]);
+    }
+    printf("\n");
+    for(int i = 0; out[i] != '\0'; i++) {
+        printf("%02x", out[i]);
+    }
+    printf("\n\n");
 
     /* Close TPM session */
     if (keyHandle != ESYS_TR_NONE) {
@@ -435,7 +454,7 @@ const EVP_CIPHER *tpm2_aes_256_cbc(void)
     if (_tpm2_aes_256_cbc == NULL &&
         ((_tpm2_aes_256_cbc = EVP_CIPHER_meth_new(NID_aes_256_cbc, TPM2_MAX_SYM_BLOCK_SIZE, TPM2_MAX_SYM_KEY_BYTES)) == NULL
          || !EVP_CIPHER_meth_set_iv_length(_tpm2_aes_256_cbc, TPM2_MAX_SYM_BLOCK_SIZE)
-         || !EVP_CIPHER_meth_set_flags(_tpm2_aes_256_cbc, EVP_CIPH_CBC_MODE)
+         || !EVP_CIPHER_meth_set_flags(_tpm2_aes_256_cbc, EVP_CIPH_CBC_MODE | EVP_CIPH_FLAG_CUSTOM_CIPHER)
          || !EVP_CIPHER_meth_set_init(_tpm2_aes_256_cbc, tpm2_cipher_init_key)
          || !EVP_CIPHER_meth_set_do_cipher(_tpm2_aes_256_cbc, tpm2_do_cipher)
          || !EVP_CIPHER_meth_set_cleanup(_tpm2_aes_256_cbc, tpm2_cipher_cleanup)

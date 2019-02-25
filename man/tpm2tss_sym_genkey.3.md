@@ -31,7 +31,7 @@ Written by Gael Guegan.
 
 ## COPYRIGHT
 
-tpm2tss is Copyright (C) 
+Copyright (C) 2019 Schneider-Electric. License BSD 3-clause.”
 
 ## SEE ALSO
 
