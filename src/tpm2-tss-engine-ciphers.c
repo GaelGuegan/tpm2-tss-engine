@@ -40,12 +40,6 @@
 
 #define HANDLE_SIZE 8
 
-typedef struct {
-    TPM2_DATA *tpm2Data; // Key Data
-    TPMI_YES_NO enc;     // Note: Openssl (encrypt:1) != TSS (encrypt:0)
-    TPM2B_IV iv;         // Initialization Vector
-} TPM2_DATA_CIPHER;
-
 static TPM2B_DATA allOutsideInfo = {
     .size = 0,
 };
@@ -216,9 +210,9 @@ static int populate_tpm2data(const unsigned char *key, TPM2_DATA **tpm2Data)
     return 1;
 }
 
-static TPMI_ALG_SYM_MODE tpm2_get_cipher_mode(EVP_CIPHER_CTX *ctx, TPM2_DATA_CIPHER *tpm2DataCipher)
+static TPMI_ALG_SYM_MODE tpm2_get_cipher_mode(EVP_CIPHER_CTX *ctx, TPM2_DATA *tpm2Data)
 {
-    if (tpm2DataCipher->tpm2Data->pub.publicArea.parameters.symDetail.sym.mode.sym == TPM2_ALG_NULL) {
+    if (tpm2Data->pub.publicArea.parameters.symDetail.sym.mode.sym == TPM2_ALG_NULL) {
         switch (EVP_CIPHER_CTX_mode(ctx)) {
             case EVP_CIPH_CFB_MODE:
                 return TPM2_ALG_CFB;
@@ -234,57 +228,48 @@ static TPMI_ALG_SYM_MODE tpm2_get_cipher_mode(EVP_CIPHER_CTX *ctx, TPM2_DATA_CIP
                 return TPM2_ALG_CBC;
         }
     } else {
-        return tpm2DataCipher->tpm2Data->pub.publicArea.parameters.symDetail.sym.mode.sym;
+        return tpm2Data->pub.publicArea.parameters.symDetail.sym.mode.sym;
     }
 }
 
 static int
 tpm2_cipher_init_key(EVP_CIPHER_CTX *ctx, const unsigned char *key, const unsigned char *iv, int enc)
 {
-    TPM2_DATA_CIPHER *tpm2DataCipher = NULL;
+    (void)(iv);
+    (void)(enc);
+    TPM2_DATA *tpm2Data = NULL;
 
     DBG("Init Cipher Key ...\n");
 
     /* Init Struct */
-    tpm2DataCipher = OPENSSL_malloc(sizeof(TPM2_DATA_CIPHER));
-    if (tpm2DataCipher == NULL) {
+    tpm2Data = OPENSSL_malloc(sizeof(TPM2_DATA));
+    if (tpm2Data == NULL) {
         ERR(tpm2_cipher_init_key, ERR_R_MALLOC_FAILURE);
         goto error;
     }
-    memset(tpm2DataCipher, 0, sizeof(TPM2_DATA_CIPHER));
+    memset(tpm2Data, 0, sizeof(TPM2_DATA));
 
     /* Fill TPM2_DATA depending of KEY */
-    if (!populate_tpm2data(key, &(tpm2DataCipher->tpm2Data))) {
+    if (!populate_tpm2data(key, &tpm2Data)) {
         ERR(tpm2_cipher_init_key, TPM2TSS_R_TPM2DATA_READ_FAILED);
         goto error;
     }
 
-    /* Fill IV */
-    if (iv) {
-        tpm2DataCipher->iv.size = EVP_CIPHER_CTX_iv_length(ctx);
-        memcpy(tpm2DataCipher->iv.buffer, iv, tpm2DataCipher->iv.size);
-    } else {
-        tpm2DataCipher->iv.size = 0;
-    }
-
-    /* Fill ENC */
-    tpm2DataCipher->enc = !enc;
-
     /* Set App Data */
-    EVP_CIPHER_CTX_set_app_data(ctx, tpm2DataCipher);
+    EVP_CIPHER_CTX_set_app_data(ctx, tpm2Data);
 
     return 1;
 
 error :
-    if (tpm2DataCipher)
-        OPENSSL_free(tpm2DataCipher);
+    if (tpm2Data)
+        OPENSSL_free(tpm2Data);
     return 0;
 }
 
 static int
 tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in, size_t inl)
 {
-    TPM2_DATA_CIPHER *tpm2DataCipher;
+    TPM2_DATA *tpm2Data;
     TSS2_RC ret;
     ESYS_AUXCONTEXT eactx = (ESYS_AUXCONTEXT){0};
     ESYS_TR keyHandle = ESYS_TR_NONE;
@@ -298,19 +283,19 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
     DBG("Ciphering ...\n");
 
     /* Get App Data */
-    tpm2DataCipher = EVP_CIPHER_CTX_get_app_data(ctx);
-    if (tpm2DataCipher == NULL ||  tpm2DataCipher->tpm2Data == NULL) {
+    tpm2Data = EVP_CIPHER_CTX_get_app_data(ctx);
+    if (tpm2Data == NULL || tpm2Data->pub.size == 0) {
         memcpy(out, in, inl);
         return 1;
     }
 
     /* Init TPM key */
-    ret = init_tpm_key(&eactx, &keyHandle, tpm2DataCipher->tpm2Data);
+    ret = init_tpm_key(&eactx, &keyHandle, tpm2Data);
     ERRchktss(tpm2_do_cipher, ret, goto error);
 
     /* Copy in_data : unsigned char* to TPM2B_MAX_BUFFER */
     in_data = OPENSSL_malloc(sizeof(TPM2B_MAX_BUFFER));
-    if (tpm2DataCipher == NULL) {
+    if (tpm2Data == NULL) {
         ERR(tpm2_do_cipher, ERR_R_MALLOC_FAILURE);
         goto error;
     }
@@ -318,26 +303,24 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
     in_data->size = inl;
 
     /* Get mode value */
-    mode = tpm2_get_cipher_mode(ctx, tpm2DataCipher);
-    enc = tpm2DataCipher->enc;
-    iv_in = tpm2DataCipher->iv;
+    mode = tpm2_get_cipher_mode(ctx, tpm2Data);
 
+    /* Get IV and Enc*/
+    iv_in.size = EVP_CIPHER_CTX_iv_length(ctx);
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+    memcpy(iv_in.buffer, ctx->iv, iv_in.size);
+    enc = !(ctx->encrypt); // Note: Openssl (encrypt:1) != TSS (encrypt:0)
+#else
+    memcpy(iv_in.buffer, EVP_CIPHER_CTX_iv(ctx), iv_in.size);
+    enc = !EVP_CIPHER_CTX_encrypting(ctx);
+#endif
     DBG("\n");
-    DBG("algo : %#x\n", tpm2DataCipher->tpm2Data->pub.publicArea.parameters.symDetail.sym.algorithm);
+    DBG("algo : %#x\n", tpm2Data->pub.publicArea.parameters.symDetail.sym.algorithm);
     DBG("mode : %#x\n", mode);
-    DBG("size : %d\n", tpm2DataCipher->tpm2Data->pub.publicArea.parameters.symDetail.sym.keyBits.sym);
+    DBG("size : %d\n", tpm2Data->pub.publicArea.parameters.symDetail.sym.keyBits.sym);
     DBG("enc  : %d\n", enc);
     DBG("iv   : %d\n", iv_in.size);
     DBG("\n");
-    printf("------------ IN ---------------- (%zd)\n", inl);
-    for(int i = 0; in[i] != '\0'; i++) {
-        printf("%c ", in[i]);
-    }
-    printf("\n");
-    for(int i = 0; in[i] != '\0'; i++) {
-        printf("%02x", in[i]);
-    }
-    printf("\n\n");
 
     /* Trying to encrypt */
     ret = Esys_EncryptDecrypt2( eactx.ectx,
@@ -377,19 +360,9 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
     memcpy(out, out_data->buffer, out_data->size);
     out[out_data->size] = '\0';
 
-    printf("------------ OUT ----------------\n");
-    for(int i = 0; out[i] != '\0'; i++) {
-        printf("%c ", out[i]);
-    }
-    printf("\n");
-    for(int i = 0; out[i] != '\0'; i++) {
-        printf("%02x", out[i]);
-    }
-    printf("\n\n");
-
     /* Close TPM session */
     if (keyHandle != ESYS_TR_NONE) {
-        if (tpm2DataCipher->tpm2Data->privatetype == KEY_TYPE_HANDLE) {
+        if (tpm2Data->privatetype == KEY_TYPE_HANDLE) {
             Esys_TR_Close(eactx.ectx, &keyHandle);
         } else {
             Esys_FlushContext(eactx.ectx, keyHandle);
@@ -402,7 +375,7 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
 error :
     /* Close TPM session */
     if (keyHandle != ESYS_TR_NONE) {
-        if (tpm2DataCipher->tpm2Data->privatetype == KEY_TYPE_HANDLE) {
+        if (tpm2Data->privatetype == KEY_TYPE_HANDLE) {
             Esys_TR_Close(eactx.ectx, &keyHandle);
         } else {
             Esys_FlushContext(eactx.ectx, keyHandle);
@@ -410,21 +383,23 @@ error :
     }
     esys_auxctx_free(&eactx);
 
-    if (tpm2DataCipher)
-        OPENSSL_free(tpm2DataCipher);
+    if (tpm2Data)
+        OPENSSL_free(tpm2Data);
     return 0;
 }
 
 static int
 tpm2_cipher_cleanup(EVP_CIPHER_CTX *ctx)
 {
-    TPM2_DATA_CIPHER *tpm2DataCipher;
+    TPM2_DATA *tpm2Data;
 
     DBG("Cleaning up ...\n");
 
     /* Free App Data */
-    tpm2DataCipher = EVP_CIPHER_CTX_get_app_data(ctx);
-    OPENSSL_free(tpm2DataCipher);
+    tpm2Data = EVP_CIPHER_CTX_get_app_data(ctx);
+    if (tpm2Data)
+        OPENSSL_free(tpm2Data);
+
     EVP_CIPHER_CTX_set_app_data(ctx, NULL);
 
     return 1;
@@ -441,7 +416,7 @@ static EVP_CIPHER tpm2_aes_256_cbc =
     tpm2_cipher_init_key,               // Init key
     tpm2_do_cipher,                     // Encrypt/Decrypt
     tpm2_cipher_cleanup,                // Cleanup
-    sizeof(TPM2_DATA_CIPHER),           // Context size
+    sizeof(TPM2_DATA),           // Context size
     NULL,                               // Set ASN1 parameters
     NULL,                               // Get ASN1 parameters
     NULL,                               // CTRL
@@ -454,11 +429,11 @@ const EVP_CIPHER *tpm2_aes_256_cbc(void)
     if (_tpm2_aes_256_cbc == NULL &&
         ((_tpm2_aes_256_cbc = EVP_CIPHER_meth_new(NID_aes_256_cbc, TPM2_MAX_SYM_BLOCK_SIZE, TPM2_MAX_SYM_KEY_BYTES)) == NULL
          || !EVP_CIPHER_meth_set_iv_length(_tpm2_aes_256_cbc, TPM2_MAX_SYM_BLOCK_SIZE)
-         || !EVP_CIPHER_meth_set_flags(_tpm2_aes_256_cbc, EVP_CIPH_CBC_MODE | EVP_CIPH_FLAG_CUSTOM_CIPHER)
+         || !EVP_CIPHER_meth_set_flags(_tpm2_aes_256_cbc, EVP_CIPH_CBC_MODE)// | EVP_CIPH_FLAG_CUSTOM_CIPHER)
          || !EVP_CIPHER_meth_set_init(_tpm2_aes_256_cbc, tpm2_cipher_init_key)
          || !EVP_CIPHER_meth_set_do_cipher(_tpm2_aes_256_cbc, tpm2_do_cipher)
          || !EVP_CIPHER_meth_set_cleanup(_tpm2_aes_256_cbc, tpm2_cipher_cleanup)
-         || !EVP_CIPHER_meth_set_impl_ctx_size(_tpm2_aes_256_cbc, sizeof(TPM2_DATA_CIPHER))
+         || !EVP_CIPHER_meth_set_impl_ctx_size(_tpm2_aes_256_cbc, sizeof(TPM2_DATA))
          || !EVP_CIPHER_meth_set_set_asn1_params(_tpm2_aes_256_cbc, NULL)
          || !EVP_CIPHER_meth_set_get_asn1_params(_tpm2_aes_256_cbc, NULL)
          || !EVP_CIPHER_meth_set_ctrl(_tpm2_aes_256_cbc, NULL)))

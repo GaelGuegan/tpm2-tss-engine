@@ -7,7 +7,7 @@ export LD_LIBRARY_PATH=$OPENSSL_ENGINES:${LD_LIBRARY_PATH-}
 export PATH=${PWD}:${PATH}
 
 DIR=$(mktemp -d)
-echo -n "hello world hello Bretagne Goodbye world" > ${DIR}/data.txt
+echo -n "hello world" > ${DIR}/data.txt
 
 # Create an Primary key pair
 echo "Generating primary key"
@@ -31,7 +31,7 @@ tpm2_load -C ${PARENT_CTX} -u ${TPM_RSA_PUBKEY} -r ${TPM_RSA_KEY} -o ${RSA_CTX}
 tpm2_flushcontext -t
 
 HANDLE=$(tpm2_evictcontrol -a o -c ${RSA_CTX} | cut -d ' ' -f 2)
-tpm2_flushcontext -T mssim -t
+tpm2_flushcontext -t
 
 KEY=$(echo ${HANDLE} | cut -d 'x' -f 2)
 IV="0123456789012345"
