@@ -70,11 +70,10 @@ static TPM2B_PUBLIC keyTemplate = {
 };
 
 static int tpm2_cipher_nids[] = {
-    NID_aes_192_ofb128,
-    NID_aes_256_cfb1,
+    NID_aes_192_cbc,
+    NID_aes_256_cfb128,
     NID_aes_256_cbc,
     NID_aes_256_ofb128,
-    NID_aes_256_cfb1,
     0
 };
 
@@ -321,6 +320,16 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
     DBG("iv   : %d\n", iv_in.size);
     DBG("\n");
 
+    printf("------------ IN ---------------- (%zd)\n", inl);
+    for(int i = 0; i < (int)inl; i++) {
+        printf("%c ", in[i]);
+    }
+    printf("\n");
+    for(int i = 0; i < (int)inl; i++) {
+        printf("%02x", in[i]);
+    }
+    printf("\n\n");
+
     /* Trying to encrypt */
     ret = Esys_EncryptDecrypt2( eactx.ectx,
                                 keyHandle,
@@ -354,6 +363,16 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
         }
     }
     ERRchktss(tpm2_do_cipher, ret, goto error);
+    DBG("ret : %#x\n", ret);
+    printf("------------ OUT ---------------- (%d)\n", out_data->size);
+    for(int i = 0; i < out_data->size; i++) {
+        printf("%c ", out[i]);
+    }
+    printf("\n");
+    for(int i = 0; i < out_data->size; i++) {
+        printf("%02x", out[i]);
+    }
+    printf("\n\n");
 
     /* Copy out_data : TPM2B_MAX_BUFFER to unsigned char* */
     memcpy(out, out_data->buffer, out_data->size);
@@ -415,7 +434,7 @@ static EVP_CIPHER tpm2_aes_256_cbc =
     tpm2_cipher_init_key,               // Init key
     tpm2_do_cipher,                     // Encrypt/Decrypt
     tpm2_cipher_cleanup,                // Cleanup
-    sizeof(TPM2_DATA),           // Context size
+    sizeof(TPM2_DATA),                  // Context size
     NULL,                               // Set ASN1 parameters
     NULL,                               // Get ASN1 parameters
     NULL,                               // CTRL
@@ -428,7 +447,7 @@ const EVP_CIPHER *tpm2_aes_256_cbc(void)
     if (_tpm2_aes_256_cbc == NULL &&
         ((_tpm2_aes_256_cbc = EVP_CIPHER_meth_new(NID_aes_256_cbc, TPM2_MAX_SYM_BLOCK_SIZE, TPM2_MAX_SYM_KEY_BYTES)) == NULL
          || !EVP_CIPHER_meth_set_iv_length(_tpm2_aes_256_cbc, TPM2_MAX_SYM_BLOCK_SIZE)
-         || !EVP_CIPHER_meth_set_flags(_tpm2_aes_256_cbc, EVP_CIPH_CBC_MODE)// | EVP_CIPH_FLAG_CUSTOM_CIPHER)
+         || !EVP_CIPHER_meth_set_flags(_tpm2_aes_256_cbc, EVP_CIPH_CBC_MODE | EVP_CIPH_FLAG_CUSTOM_CIPHER)
          || !EVP_CIPHER_meth_set_init(_tpm2_aes_256_cbc, tpm2_cipher_init_key)
          || !EVP_CIPHER_meth_set_do_cipher(_tpm2_aes_256_cbc, tpm2_do_cipher)
          || !EVP_CIPHER_meth_set_cleanup(_tpm2_aes_256_cbc, tpm2_cipher_cleanup)
@@ -441,6 +460,46 @@ const EVP_CIPHER *tpm2_aes_256_cbc(void)
         _tpm2_aes_256_cbc = NULL;
     }
     return _tpm2_aes_256_cbc;
+}
+#endif
+
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+static EVP_CIPHER tpm2_aes_256_cfb =
+{
+    NID_aes_256_cfb128,                 // ID
+    TPM2_MAX_SYM_BLOCK_SIZE,            // Block size
+    TPM2_MAX_SYM_KEY_BYTES,             // Key length
+    TPM2_MAX_SYM_BLOCK_SIZE,            // IV length
+    EVP_CIPH_CFB_MODE,                  // Flags
+    tpm2_cipher_init_key,               // Init key
+    tpm2_do_cipher,                     // Encrypt/Decrypt
+    tpm2_cipher_cleanup,                // Cleanup
+    sizeof(TPM2_DATA),                  // Context size
+    NULL,                               // Set ASN1 parameters
+    NULL,                               // Get ASN1 parameters
+    NULL,                               // CTRL
+    NULL                                // App data
+};
+#else
+static EVP_CIPHER *_tpm2_aes_256_cfb = NULL;
+const EVP_CIPHER *tpm2_aes_256_cfb(void)
+{
+    if (_tpm2_aes_256_cfb == NULL &&
+        ((_tpm2_aes_256_cfb = EVP_CIPHER_meth_new(NID_aes_256_cfb128, TPM2_MAX_SYM_BLOCK_SIZE, TPM2_MAX_SYM_KEY_BYTES)) == NULL
+         || !EVP_CIPHER_meth_set_iv_length(_tpm2_aes_256_cfb, TPM2_MAX_SYM_BLOCK_SIZE)
+         || !EVP_CIPHER_meth_set_flags(_tpm2_aes_256_cfb, EVP_CIPH_CFB_MODE | EVP_CIPH_FLAG_CUSTOM_CIPHER)
+         || !EVP_CIPHER_meth_set_init(_tpm2_aes_256_cfb, tpm2_cipher_init_key)
+         || !EVP_CIPHER_meth_set_do_cipher(_tpm2_aes_256_cfb, tpm2_do_cipher)
+         || !EVP_CIPHER_meth_set_cleanup(_tpm2_aes_256_cfb, tpm2_cipher_cleanup)
+         || !EVP_CIPHER_meth_set_impl_ctx_size(_tpm2_aes_256_cfb, sizeof(TPM2_DATA))
+         || !EVP_CIPHER_meth_set_set_asn1_params(_tpm2_aes_256_cfb, NULL)
+         || !EVP_CIPHER_meth_set_get_asn1_params(_tpm2_aes_256_cfb, NULL)
+         || !EVP_CIPHER_meth_set_ctrl(_tpm2_aes_256_cfb, NULL)))
+    {
+        EVP_CIPHER_meth_free(_tpm2_aes_256_cfb);
+        _tpm2_aes_256_cfb = NULL;
+    }
+    return _tpm2_aes_256_cfb;
 }
 #endif
 
@@ -463,12 +522,17 @@ tpm2_ciphers_selector(ENGINE *e, const EVP_CIPHER **cipher, const int **nids, in
         *cipher = tpm2_aes_256_cbc();
 #endif
         break;
+
+    case NID_aes_256_cfb128:
+#if OPENSSL_VERSION_NUMBER < 0x10100000
+        *cipher = &tpm2_aes_256_cfb;
+#else
+        *cipher = tpm2_aes_256_cfb();
+#endif
+        break;
     /*
     case NID_aes_256_ocb:
         *cipher = tpm2_aes_256_ocb();
-        break;
-    case NID_aes_256_cfb1:
-        *cipher = tpm2_aes_256_cfb();
         break;
     */
     default:
