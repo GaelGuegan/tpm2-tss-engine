@@ -88,6 +88,18 @@ static int convert_array_hex_to_int(const unsigned char *in, size_t size)
 
     return integer;
 }
+static char *convert_array_hex_to_string(const unsigned char *in, size_t size)
+{
+    char *string = (char *)malloc(2*size);
+
+    for(size_t i = 0; i < size; i++)
+    {
+        string[2*i] = (in[i] >> 4) + 48;
+        string[2*i+1] =(0xF&in[i]) + 48;
+    }
+
+    return string;
+}
 
 int
 tpm2tss_sym_genkey(EVP_CIPHER_CTX *cipher, TPMI_ALG_PUBLIC algo,
@@ -286,6 +298,8 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
         memcpy(out, in, inl);
         return 1;
     }
+    if (inl == 0)
+        return 1;
 
     /* Init TPM key */
     ret = init_tpm_key(&eactx, &keyHandle, tpm2Data);
@@ -320,15 +334,12 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
     DBG("iv   : %d\n", iv_in.size);
     DBG("\n");
 
-    printf("------------ IN ---------------- (%zd)\n", inl);
-    for(int i = 0; i < (int)inl; i++) {
-        printf("%c ", in[i]);
-    }
-    printf("\n");
-    for(int i = 0; i < (int)inl; i++) {
-        printf("%02x", in[i]);
-    }
-    printf("\n\n");
+if(!enc) {
+    printf("data : (%zd) %s\n",inl,in);
+    char *tmp = convert_array_hex_to_string(iv_in.buffer, iv_in.size/2);
+    printf("iv   : %s\n", tmp);
+    memcpy(iv_in.buffer, tmp, iv_in.size);
+}
 
     /* Trying to encrypt */
     ret = Esys_EncryptDecrypt2( eactx.ectx,
@@ -363,14 +374,14 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
         }
     }
     ERRchktss(tpm2_do_cipher, ret, goto error);
-    DBG("ret : %#x\n", ret);
-    printf("------------ OUT ---------------- (%d)\n", out_data->size);
+
+    printf("------- OUT -------\nData: ");
     for(int i = 0; i < out_data->size; i++) {
-        printf("%c ", out[i]);
+        printf("%02x", out_data->buffer[i]);
     }
-    printf("\n");
-    for(int i = 0; i < out_data->size; i++) {
-        printf("%02x", out[i]);
+    printf("\nIV: ");
+    for(int i = 0; i < iv_out->size; i++) {
+        printf("%02x", iv_out->buffer[i]);
     }
     printf("\n\n");
 

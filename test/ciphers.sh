@@ -41,12 +41,17 @@ echo -n $IV > ${DIR}/iv
 # Encrypt Data
 tpm2_encryptdecrypt -c ${HANDLE} -I ${DIR}/data.txt -o ${DIR}/enc_data -i ${DIR}/iv
 openssl enc -aes-256-cfb -e -engine tpm2tss -in ${DIR}/data.txt -out ${DIR}/enc_data1 -K ${KEY} -iv ${IV}
-openssl enc -aes-256 -e -engine tpm2tss -in ${DIR}/data.txt -out ${DIR}/enc_data2 -K ${KEY} -iv ${IV}
+hd ${DIR}/enc_data
+hd ${DIR}/enc_data1
+: <<'END'
+
+openssl enc -aes256 -e -engine tpm2tss -in ${DIR}/data.txt -out ${DIR}/enc_data2 -K ${KEY} -iv ${IV}
+
 
 # Decrypt Data
 tpm2_encryptdecrypt -c ${HANDLE} -I ${DIR}/enc_data -o ${DIR}/dec_data -D -i ${DIR}/iv
 openssl enc -aes-256-cfb -d -engine tpm2tss -in ${DIR}/enc_data1 -out ${DIR}/dec_data1 -K ${KEY} -iv ${IV}
-openssl enc -aes-256 -d -engine tpm2tss -in ${DIR}/enc_data2 -out ${DIR}/dec_data2 -K ${KEY} -iv ${IV}
+openssl enc -aes256 -d -engine tpm2tss -in ${DIR}/enc_data2 -out ${DIR}/dec_data2 -K ${KEY} -iv ${IV}
 
 set +e
 
@@ -56,6 +61,8 @@ diff ${DIR}/data.txt ${DIR}/dec_data2
 
 cat ${DIR}/dec_data1
 cat ${DIR}/dec_data2
+
+END
 
 # Release persistent HANDLE
 tpm2_evictcontrol -a o -c ${HANDLE}
