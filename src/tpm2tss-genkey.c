@@ -51,7 +51,7 @@ char *help =
     "    <filename>      storage for the encrypted private key\n"
     "Options:\n"
     "    -a, --alg       public key algorithm (rsa, ecdsa, aes) (default: rsa)\n"
-    "    -m, --mode      block cipher mode of operation (default: cfb)"
+    "    -m, --mode      block cipher mode of operation (default: null)"
     "    -c, --curve     curve for ecc (default: nist_p256)\n"
     "    -e, --exponent  exponent for rsa (default: 65537)\n"
     "    -h, --help      print help\n"
@@ -74,6 +74,7 @@ static const struct option long_options[] = {
     {"parent",   required_argument, 0, 'P'},
     {"keysize",  required_argument, 0, 's'},
     {"verbose",  no_argument,       0, 'v'},
+    {"symmode",  required_argument, 0, 'm'},
     {0,          0,                 0,  0 }
 };
 
@@ -112,7 +113,7 @@ parse_opts(int argc, char **argv)
     opt.parent = 0;
     opt.keysize = 2048;
     opt.verbose = 0;
-    opt.sym_mode = TPM2_ALG_CFB;
+    opt.sym_mode = TPM2_ALG_NULL;
 
     /* parse the options */
     int c;

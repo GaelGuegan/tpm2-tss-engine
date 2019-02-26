@@ -95,8 +95,7 @@ tpm2tss_sym_genkey(EVP_CIPHER_CTX *cipher, TPMI_ALG_PUBLIC algo,
                    TPMI_ALG_SYM_MODE mode, int bits,
                    char *password, TPM2_HANDLE parentHandle)
 {
-    //DBG("Generating %s in %s mode for %i bits keysize.\n", algo, mode, bits);
-    DBG("Generating for %i bits keysize.\n", bits);
+    DBG("Generating : algo %#x mode %#x size %i.\n", algo, mode, bits);
 
     TSS2_RC r = TSS2_RC_SUCCESS;
     ESYS_AUXCONTEXT eactx = (ESYS_AUXCONTEXT) { NULL, NULL };
