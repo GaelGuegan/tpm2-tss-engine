@@ -99,7 +99,7 @@ tpm2tss_sym_genkey(EVP_CIPHER_CTX *cipher, TPMI_ALG_PUBLIC algo,
     DBG("Generating for %i bits keysize.\n", bits);
 
     TSS2_RC r = TSS2_RC_SUCCESS;
-    ESYS_AUXCONTEXT eactx = (ESYS_AUXCONTEXT) { 0 };
+    ESYS_AUXCONTEXT eactx = (ESYS_AUXCONTEXT) { NULL, NULL };
     ESYS_TR parent = ESYS_TR_NONE;
     TPM2B_PUBLIC *keyPublic = NULL;
     TPM2B_PRIVATE *keyPrivate = NULL;
@@ -271,7 +271,7 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
 {
     TPM2_DATA *tpm2Data;
     TSS2_RC ret;
-    ESYS_AUXCONTEXT eactx = (ESYS_AUXCONTEXT){0};
+    ESYS_AUXCONTEXT eactx = (ESYS_AUXCONTEXT){ NULL, NULL};
     ESYS_TR keyHandle = ESYS_TR_NONE;
     TPM2B_MAX_BUFFER *out_data;
     TPM2B_MAX_BUFFER *in_data;

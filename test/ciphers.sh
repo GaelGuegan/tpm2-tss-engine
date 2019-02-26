@@ -39,11 +39,9 @@ echo -n $IV > ${DIR}/iv
 
 # Encrypt Data
 openssl enc -aes-256-cbc -e -engine tpm2tss -in ${DIR}/data.txt -out ${DIR}/enc_data -K ${KEY} -iv ${IV}
-#tpm2_encryptdecrypt -c ${HANDLE} -I ${DIR}/data.txt -o ${DIR}/enc_data2 -i ${DIR}/iv
 
 # Decrypt Data
 openssl enc -aes-256-cbc -d -engine tpm2tss -in ${DIR}/enc_data -out ${DIR}/dec_data.txt -K ${KEY} -iv ${IV}
-#tpm2_encryptdecrypt -c ${HANDLE} -I ${DIR}/enc_data2 -o ${DIR}/dec_data.txt2 -D -i ${DIR}/iv
 
 diff ${DIR}/data.txt ${DIR}/dec_data.txt
 

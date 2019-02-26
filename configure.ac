@@ -30,11 +30,12 @@
 #;*****************************************************************************;
 AC_PREREQ([2.68])
 
-AC_INIT([openssl-tpm2-engine],
-        [0.0.1],
-        [https://github.com/tpm2-software/tpm2-tss-engine],
+AC_INIT([tpm2-tss-engine],
+        [1.0.0-rc0],
+        [https://github.com/tpm2-software/tpm2-tss-engine/issues],
         [],
         [https://github.com/tpm2-software/tpm2-tss-engine])
+
 dnl Avoid setting CFLAGS to anything by default; we use AC_CFLAGS below for this.
 : ${CFLAGS=""}
 
@@ -118,6 +119,7 @@ AC_PATH_PROG([PANDOC], [pandoc])
 AS_IF([test -z "$PANDOC"],
     [AC_MSG_WARN([Required executable pandoc not found, man pages will not be built])])
 AM_CONDITIONAL([HAVE_PANDOC],[test -n "$PANDOC"])
+AM_CONDITIONAL([HAVE_MAN_PAGES],[test -d "${srcdir}/man/man1" -o -n "$PANDOC"])
 
 AC_PATH_PROG([EXPECT], [expect])
 AS_IF([test -z "$EXPECT"],
@@ -146,9 +148,21 @@ AS_IF([test -z "$with_completionsdir"],
     [with_completionsdir=$datarootdir/bash-completion/completions])
 AC_SUBST(completionsdir, "$with_completionsdir")
 
-m4_define([cmocka_min_version], [1.0])
-m4_define([cmocka_err], [Unit test enabled, but cmocka missing or version requirements not met. cmocka version must be >= cmocka_min_version])
-PKG_CHECK_MODULES([CMOCKA], [cmocka >= 1.0])
+AC_ARG_ENABLE([unit],
+            [AS_HELP_STRING([--enable-unit],
+                            [build cmocka unit tests (default is no)])],
+            [enable_unit=$enableval],
+            [enable_unit=no])
+AS_IF([test "x$enable_unit" != "xno" ], 
+      [PKG_CHECK_MODULES([CMOCKA], [cmocka >= 1.0])])
+AM_CONDITIONAL([UNIT], [test "x$enable_unit" != xno])
+
+AC_ARG_ENABLE([integration],
+            [AS_HELP_STRING([--enable-integration],
+                            [build integration tests against TPM (default is no)])],
+            [enable_integration=$enableval],
+            [enable_integration=no])
+AM_CONDITIONAL([INTEGRATION], [test "x$enable_integration" != xno])
 
 AC_OUTPUT
 
