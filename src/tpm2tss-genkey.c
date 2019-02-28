@@ -51,7 +51,7 @@ char *help =
     "    <filename>      storage for the encrypted private key\n"
     "Options:\n"
     "    -a, --alg       public key algorithm (rsa, ecdsa, aes) (default: rsa)\n"
-    "    -m, --mode      block cipher mode of operation (default: null)"
+    "    -m, --mode      block cipher mode of operation (default: null)\n"
     "    -c, --curve     curve for ecc (default: nist_p256)\n"
     "    -e, --exponent  exponent for rsa (default: 65537)\n"
     "    -h, --help      print help\n"
@@ -62,7 +62,7 @@ char *help =
     "    -v, --verbose   print verbose messages\n"
     "\n";
 
-static const char *optstr = "a:c:e:ho:p:P:s:v";
+static const char *optstr = "a:c:e:ho:p:P:s:vm:";
 
 static const struct option long_options[] = {
     {"alg",      required_argument, 0, 'a'},
@@ -160,13 +160,13 @@ parse_opts(int argc, char **argv)
             break;
         case 'm':
             if (strcasecmp(optarg, "cfb") == 0) {
-                opt.alg = TPM2_ALG_CFB;
+                opt.sym_mode = TPM2_ALG_CFB;
                 break;
             } else if (strcasecmp(optarg, "cbc") == 0) {
-                opt.alg = TPM2_ALG_CBC;
+                opt.sym_mode = TPM2_ALG_CBC;
                 break;
             } else if (strcasecmp(optarg, "ofb") == 0) {
-                opt.alg = TPM2_ALG_OFB;
+                opt.sym_mode = TPM2_ALG_OFB;
                 break;
             } else {
                 ERR("Unknown sym mode.\n");
@@ -345,7 +345,6 @@ main(int argc, char **argv)
         exit(1);
 
     TPM2_DATA *tpm2Data = NULL;
-
     /* Initialize the tpm2-tss engine */
     ENGINE_load_dynamic();
 

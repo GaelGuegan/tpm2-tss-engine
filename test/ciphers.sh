@@ -7,13 +7,13 @@ export LD_LIBRARY_PATH=$OPENSSL_ENGINES:${LD_LIBRARY_PATH-}
 export PATH=${PWD}:${PATH}
 
 DIR=$(mktemp -d)
-echo -n "hello world goodbye world bonjour le monde aurevoir" > ${DIR}/data.txt
+echo -n "hello world goodbye world tpm2 tss openssl" > ${DIR}/data.txt
 
 # Create an Primary key pair
 echo "Generating primary key"
 PARENT_CTX=${DIR}/primary_owner_key.ctx
 
-tpm2_startup -T mssim -c || true
+tpm2_startup -c || true
 
 tpm2_createprimary -a o -g sha256 -G rsa -o ${PARENT_CTX}
 tpm2_flushcontext -t
@@ -39,33 +39,15 @@ IV="0123456789012345"
 echo -n $IV > ${DIR}/iv
 
 # Encrypt Data
-tpm2_encryptdecrypt -c ${HANDLE} -I ${DIR}/data.txt -o ${DIR}/enc_data -i ${DIR}/iv
-openssl enc -aes-256-cfb -e -engine tpm2tss -in ${DIR}/data.txt -out ${DIR}/enc_data1 -K ${KEY} -iv ${IV}
-hd ${DIR}/enc_data
-hd ${DIR}/enc_data1
-: <<'END'
-
-openssl enc -aes256 -e -engine tpm2tss -in ${DIR}/data.txt -out ${DIR}/enc_data2 -K ${KEY} -iv ${IV}
-
+openssl enc -aes-256-cfb -e -engine tpm2tss -in ${DIR}/data.txt -out ${DIR}/enc_data -K ${KEY} -iv ${IV}
 
 # Decrypt Data
-tpm2_encryptdecrypt -c ${HANDLE} -I ${DIR}/enc_data -o ${DIR}/dec_data -D -i ${DIR}/iv
-openssl enc -aes-256-cfb -d -engine tpm2tss -in ${DIR}/enc_data1 -out ${DIR}/dec_data1 -K ${KEY} -iv ${IV}
-openssl enc -aes256 -d -engine tpm2tss -in ${DIR}/enc_data2 -out ${DIR}/dec_data2 -K ${KEY} -iv ${IV}
-
-set +e
+openssl enc -aes-256-cfb -d -engine tpm2tss -in ${DIR}/enc_data -out ${DIR}/dec_data -K ${KEY} -iv ${IV}
 
 diff ${DIR}/data.txt ${DIR}/dec_data
-diff ${DIR}/data.txt ${DIR}/dec_data1
-diff ${DIR}/data.txt ${DIR}/dec_data2
-
-cat ${DIR}/dec_data1
-cat ${DIR}/dec_data2
-
-END
 
 # Release persistent HANDLE
 tpm2_evictcontrol -a o -c ${HANDLE}
 
 # Test Gen Key
-tpm2tss-genkey -a aes -s 128 ${DIR}/mykey
+tpm2tss-genkey -a aes -m cfb -s 128 ${DIR}/mykey
