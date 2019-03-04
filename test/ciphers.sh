@@ -7,7 +7,11 @@ export LD_LIBRARY_PATH=$OPENSSL_ENGINES:${LD_LIBRARY_PATH-}
 export PATH=${PWD}:${PATH}
 
 DIR=$(mktemp -d)
-echo -n "hello world goodbye world tpm2 tss openssl" > ${DIR}/data.txt
+if openssl version | grep "OpenSSL 1.0.2" > /dev/null; then
+    echo -n "hello" > ${DIR}/data.txt
+else
+    echo -n "hello world goodbye world tpm2 tss openssl" > ${DIR}/data.txt
+fi
 
 # Create an Primary key pair
 echo "Generating primary key"

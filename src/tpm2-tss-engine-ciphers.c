@@ -290,11 +290,7 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
     /* Get App Data */
     tpm2Data = EVP_CIPHER_CTX_get_app_data(ctx);
     if (tpm2Data == NULL || tpm2Data->pub.size == 0 || inl == 0) {
-#if OPENSSL_VERSION_NUMBER < 0x10100000
-        return 1;
-#else
         return 0;
-#endif
     }
 
     /* Init TPM key */
