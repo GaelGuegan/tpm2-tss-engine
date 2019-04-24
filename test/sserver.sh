@@ -14,11 +14,6 @@ if openssl version | grep "OpenSSL 1.0.2" >/dev/null; then
     exit 77
 fi
 
-if openssl version | grep "OpenSSL 1.1.0" >/dev/null; then
-    echo "OpenSSL 1.1.0 trying to use symmetric cipher, failing without persistent handle."
-    exit 77
-fi
-
 DIR=$(mktemp -d)
 
 echo -n "WORKING !!!">${DIR}/index.html
