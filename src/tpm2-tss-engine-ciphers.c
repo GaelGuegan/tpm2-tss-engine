@@ -151,7 +151,7 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
     TSS2_RC ret;
     ESYS_AUXCONTEXT eactx = (ESYS_AUXCONTEXT){ NULL, NULL};
     ESYS_TR keyHandle = ESYS_TR_NONE;
-    TPM2B_MAX_BUFFER *out_data, *in_data;
+    TPM2B_MAX_BUFFER *out_data, in_data;
     TPM2B_IV *iv_out, iv_in;
     TPMI_ALG_SYM_MODE mode;
     TPMI_YES_NO enc;
@@ -169,13 +169,12 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
     ERRchktss(tpm2_do_cipher, ret, goto error);
 
     /* Copy in_data : unsigned char* to TPM2B_MAX_BUFFER */
-    in_data = OPENSSL_malloc(sizeof(TPM2B_MAX_BUFFER));
-    if (tpm2Data == NULL) {
-        ERR(tpm2_do_cipher, ERR_R_MALLOC_FAILURE);
+    if (inl >= sizeof(in_data.buffer)) {
+        ERR(tpm2_do_cipher, TPM2TSS_R_GENERAL_FAILURE);
         goto error;
     }
-    memcpy(in_data->buffer, in, inl);
-    in_data->size = inl;
+    memcpy(in_data.buffer, in, inl);
+    in_data.size = inl;
 
     /* Get mode value */
     mode = tpm2_get_cipher_mode(ctx, tpm2Data);
@@ -197,7 +196,7 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
                                 ESYS_TR_PASSWORD,
                                 ESYS_TR_NONE,
                                 ESYS_TR_NONE,
-                                in_data,
+                                &in_data,
                                 enc,
                                 mode,
                                 &iv_in,
@@ -205,6 +204,7 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
                                 &iv_out );
     if (ret == TPM2_RC_COMMAND_CODE) {
         DBG("Esys_EncryptDecrypt2 : FAILED\n");
+        DBG("Failing back to Esys_EncryptDecrypt\n");
         ret = Esys_EncryptDecrypt( eactx.ectx,
                                    keyHandle,
                                    ESYS_TR_PASSWORD,
@@ -213,7 +213,7 @@ tpm2_do_cipher(EVP_CIPHER_CTX *ctx, unsigned char *out, const unsigned char *in,
                                    enc,
                                    mode,
                                    &iv_in,
-                                   in_data,
+                                   &in_data,
                                    &out_data,
                                    &iv_out );
         if(ret == TPM2_RC_SUCCESS) {
@@ -257,14 +257,6 @@ error :
     return 0;
 }
 
-static int
-tpm2_cipher_cleanup(EVP_CIPHER_CTX *ctx)
-{
-    (void)(ctx);
-    DBG("Cleaning up ...\n");
-    return 1;
-}
-
 #if OPENSSL_VERSION_NUMBER < 0x10100000
 static EVP_CIPHER tpm2_aes_256_ofb =
 {
@@ -275,7 +267,7 @@ static EVP_CIPHER tpm2_aes_256_ofb =
     EVP_CIPH_OFB_MODE,                  // Flags
     tpm2_cipher_init_key,               // Init key
     tpm2_do_cipher,                     // Encrypt/Decrypt
-    tpm2_cipher_cleanup,                // Cleanup
+    NULL,                               // Cleanup
     sizeof(TPM2_DATA),                  // Context size
     NULL,                               // Set ASN1 parameters
     NULL,                               // Get ASN1 parameters
@@ -292,7 +284,7 @@ const EVP_CIPHER *tpm2_aes_256_ofb(void)
          || !EVP_CIPHER_meth_set_flags(_tpm2_aes_256_ofb, EVP_CIPH_OFB_MODE | EVP_CIPH_FLAG_CUSTOM_CIPHER)
          || !EVP_CIPHER_meth_set_init(_tpm2_aes_256_ofb, tpm2_cipher_init_key)
          || !EVP_CIPHER_meth_set_do_cipher(_tpm2_aes_256_ofb, tpm2_do_cipher)
-         || !EVP_CIPHER_meth_set_cleanup(_tpm2_aes_256_ofb, tpm2_cipher_cleanup)
+         || !EVP_CIPHER_meth_set_cleanup(_tpm2_aes_256_ofb, NULL)
          || !EVP_CIPHER_meth_set_impl_ctx_size(_tpm2_aes_256_ofb, sizeof(TPM2_DATA))
          || !EVP_CIPHER_meth_set_set_asn1_params(_tpm2_aes_256_ofb, NULL)
          || !EVP_CIPHER_meth_set_get_asn1_params(_tpm2_aes_256_ofb, NULL)
@@ -315,7 +307,7 @@ static EVP_CIPHER tpm2_aes_256_cfb =
     EVP_CIPH_CFB_MODE,                  // Flags
     tpm2_cipher_init_key,               // Init key
     tpm2_do_cipher,                     // Encrypt/Decrypt
-    tpm2_cipher_cleanup,                // Cleanup
+    NULL,                               // Cleanup
     sizeof(TPM2_DATA),                  // Context size
     NULL,                               // Set ASN1 parameters
     NULL,                               // Get ASN1 parameters
@@ -332,7 +324,7 @@ const EVP_CIPHER *tpm2_aes_256_cfb(void)
          || !EVP_CIPHER_meth_set_flags(_tpm2_aes_256_cfb, EVP_CIPH_CFB_MODE | EVP_CIPH_FLAG_CUSTOM_CIPHER)
          || !EVP_CIPHER_meth_set_init(_tpm2_aes_256_cfb, tpm2_cipher_init_key)
          || !EVP_CIPHER_meth_set_do_cipher(_tpm2_aes_256_cfb, tpm2_do_cipher)
-         || !EVP_CIPHER_meth_set_cleanup(_tpm2_aes_256_cfb, tpm2_cipher_cleanup)
+         || !EVP_CIPHER_meth_set_cleanup(_tpm2_aes_256_cfb, NULL)
          || !EVP_CIPHER_meth_set_impl_ctx_size(_tpm2_aes_256_cfb, sizeof(TPM2_DATA))
          || !EVP_CIPHER_meth_set_set_asn1_params(_tpm2_aes_256_cfb, NULL)
          || !EVP_CIPHER_meth_set_get_asn1_params(_tpm2_aes_256_cfb, NULL)

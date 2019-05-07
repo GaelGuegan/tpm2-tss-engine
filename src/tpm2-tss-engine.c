@@ -282,11 +282,13 @@ init_engine(ENGINE *e) {
         return rc;
     }
 
+#ifdef ENABLE_SYMMETRIC
     rc = init_ciphers(e);
     if (rc != 1) {
         ERR(init_engine, TPM2TSS_R_SUBINIT_FAILED);
         return rc;
     }
+#endif
 
 
     initialized = 1;
